@@ -3,9 +3,9 @@
 
 Fast ip parsing from local file
 
-Data file (update/IP2LOCATION-LITE-DB11.ZIP) is not exist!<br>
+Data file (update/IP2LOCATION-LITE-DB11.CSV.ZIP) is not exist!<br>
 Register to <a href = "http://www.ip2location.com//">www.ip2location.com</a><br>
-Download IP2LOCATION-LITE-DB11.ZIP file and copy to update folder.<br>
+Download IP2LOCATION-LITE-DB11.CSV.ZIP file and copy to update folder.<br>
 AVG parsing time on my server: 15.6965 us.<br>
 Demo: <a href="http://atandrastoth.co.uk/main/pages/phpclasses/iplocator/">Live Demo</a><br>
 install:
