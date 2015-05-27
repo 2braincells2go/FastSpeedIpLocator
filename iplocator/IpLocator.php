@@ -1,8 +1,18 @@
 <?php
-class IpLocator {
+/**
+ * IpLocator v.1.0.0 PHP Class
+ * Author: Tóth András
+ * Web: http://atandrastoth.co.uk
+ * email: atandrastoth@gmail.com
+ * Licensed under the MIT license
+ */
+class IpLocator
+{
+    private $ipType = 'ipV4';
     private $blocksArray = array();
     private $FieldInfo = array();
     private $thisPath = "";
+    
     public static function getInstance() {
         static $instance = null;
         if (null === $instance) {
@@ -10,40 +20,33 @@ class IpLocator {
         }
         return $instance;
     }
+    
     protected function __construct() {
-        $reflector         = new ReflectionClass('IpLocator');
-        $this->thisPath    = dirname($reflector->getFileName()) . DIRECTORY_SEPARATOR;
-        $this->FieldInfo   = array(
-            'ip' => '',
-            'country_code' => '',
-            'country_name' => '',
-            'region_name' => '',
-            'city_name' => '',
-            'latitude' => '',
-            'longitude' => '',
-            'zip_code' => '',
-            'time_zone' => ''
-        );
-        $this->blocksArray = $this->GetFiles($this->thisPath . 'ip_blocks/');
+        $reflector = new ReflectionClass('IpLocator');
+        $this->thisPath = dirname($reflector->getFileName()) . DIRECTORY_SEPARATOR;
+        $this->FieldInfo = array('ip' => '', 'country_code' => '', 'country_name' => '', 'region_name' => '', 'city_name' => '', 'latitude' => '', 'longitude' => '', 'zip_code' => '', 'time_zone' => '', 'area_code' => '');
+        $this->blocksArray = $this->GetFiles($this->thisPath . 'ip_blocks' . DIRECTORY_SEPARATOR, '*');
+        if (sizeof($this->blocksArray) !== 0) $this->ipType = file_exists($this->thisPath . 'ip_blocks' . DIRECTORY_SEPARATOR . '0.ipV4') ? $this->ipType : 'ipV6';
     }
-    public function InstallBlocks($maxRow = true, $deltemp = false) {
-        $this->DeleteFiles($this->thisPath . 'ip_blocks/', 'blk', false);
-        if ($deltemp) {
-            $this->DeleteFiles($this->thisPath . 'update/', 'zip', true);
-            $file = $this->thisPath . 'update/' . $this->GetFiles($this->thisPath . 'update/', 'zip', true);
-            $zip  = new ZipArchive;
-            $res  = $zip->open($file);
-            if ($res) {
-                $zip->extractTo($this->thisPath . 'update/');
-                $zip->close();
-            }
+    
+    public function InstallBlocks($zipFile, $maxRow = true, $deltemp = false) {
+        $this->DeleteFiles($this->thisPath . 'ip_blocks' . DIRECTORY_SEPARATOR);
+        $this->DeleteFiles($this->thisPath . 'update' . DIRECTORY_SEPARATOR, 'zip');
+        $file = $this->thisPath . $zipFile;
+        $zip = new ZipArchive;
+        $res = $zip->open($file);
+        if ($res) {
+            $zip->extractTo($this->thisPath . 'update' . DIRECTORY_SEPARATOR);
+            $zip->close();
         }
-        if ($deltemp)
-            $this->DeleteFiles($this->thisPath . 'update/', 'csv', true);
-        $file   = $this->thisPath . 'update/' . $this->GetFiles($this->thisPath . 'update/', 'csv', true);
+        if ($deltemp) $this->DeleteFiles($this->thisPath . 'update' . DIRECTORY_SEPARATOR, 'csv');
+        $file = $this->GetFiles($this->thisPath . 'update' . DIRECTORY_SEPARATOR, '[cC][sS][vV]', true);
+        $matches = array();
+        preg_match("/IPV6/", $file, $matches);
+        $this->ipType = (sizeof($matches) !== 0) ? 'ipV6' : 'ipV4';
         $maxRow = $maxRow === true ? $this->GetMaxRows($file) : $maxRow;
-        $i      = 0;
-        $spfile = $this->thisPath . 'ip_blocks/' . "0.blk";
+        $i = 0;
+        $spfile = $this->thisPath . 'ip_blocks' . DIRECTORY_SEPARATOR . "0." . $this->ipType;
         $handle = fopen($file, 'r') or die("Couldn't get handle");
         $splitHandle = fopen($spfile, 'a') or die("can't open file");
         if ($handle) {
@@ -52,7 +55,7 @@ class IpLocator {
                 $row = fgets($handle);
                 if (!is_resource($splitHandle)) {
                     $fileld = str_getcsv($row, ',', '"', '\\');
-                    $splitHandle = fopen($this->thisPath . 'ip_blocks/' . str_replace('"', '', $fileld[0]) . '.blk', 'a') or die("can't open file");
+                    $splitHandle = fopen($this->thisPath . 'ip_blocks' . DIRECTORY_SEPARATOR . str_replace('"', '', $fileld[0]) . '.' . $this->ipType, 'a') or die("can't open file");
                 }
                 fwrite($splitHandle, $row);
                 if ($i == $maxRow) {
@@ -62,21 +65,37 @@ class IpLocator {
             }
         }
         fclose($handle);
-        if ($deltemp)
-            $this->DeleteFiles($this->thisPath . 'update/', 'csv', false);
+        if ($deltemp) $this->DeleteFiles($this->thisPath . 'update' . DIRECTORY_SEPARATOR);
     }
+    
     public function LocateIp($ip = '') {
-        $long = $this->ip2int($ip);
+        $ip = trim($ip);
+        if ($this->ipType == 'ipV6') {
+            if (strpos($ip, ':') === false) {
+                $long = $this->Ipv6ToLongV2($this->IPv4To6($ip)) [1];
+            } 
+            else {
+                $long = $this->Ipv6ToLongV1($ip);
+            }
+        } 
+        else {
+            $long = abs(ip2long($ip));
+        }
         $last = '0';
         foreach ($this->blocksArray as $value) {
             if ($long <= $value) {
                 $retval = $this->GetIpData($long, $last);
                 $retval = str_getcsv($retval, ',', '"', '\\');
-                $i      = 1;
+                $i = 1;
                 unset($retval[0], $retval[1]);
                 $retval[1] = $ip;
                 foreach ($this->FieldInfo as $key => $value) {
-                    $this->FieldInfo[$key] = str_replace('"', '', $retval[$i]);
+                    if (isset($retval[$i])) {
+                        $this->FieldInfo[$key] = str_replace('"', '', $retval[$i]);
+                    } 
+                    else {
+                        unset($this->FieldInfo[$key]);
+                    }
                     $i++;
                 }
                 return $this->FieldInfo;
@@ -84,6 +103,7 @@ class IpLocator {
             $last = $value;
         }
     }
+    
     private function GetMaxRows($fl) {
         $i = 0;
         if ($handle = fopen($fl, "r")) {
@@ -94,57 +114,45 @@ class IpLocator {
         }
         return round(sqrt($i));
     }
-    private function DeleteFiles($openFolder, $type = 'blk', $filt = false) {
-        $ipFiles = array();
-        $i       = 0;
-        if ($handle = opendir($openFolder)) {
-            while (false !== ($entry = readdir($handle))) {
-                if ($filt && $entry != "." && $entry != ".." && strtolower(substr($entry, strlen($entry) - 3)) != $type) {
-                    unlink($openFolder . $entry);
-                } else if (!$filt && strtolower(substr($entry, strlen($entry) - 3)) == $type) {
-                    unlink($openFolder . $entry);
-                }
-            }
-            closedir($handle);
+    
+    private function DeleteFiles($dir, $excludeType = 'null') {
+        $it = new RecursiveDirectoryIterator($dir);
+        $it = new RecursiveIteratorIterator($it, RecursiveIteratorIterator::CHILD_FIRST);
+        foreach ($it as $file) {
+            if ('.' === $file->getBasename() || '..' === $file->getBasename() || strtolower(pathinfo($file, PATHINFO_EXTENSION)) === strtolower($excludeType)) continue;
+            if ($file->isDir()) rmdir($file->getPathname());
+            else unlink($file->getPathname());
         }
-        sort($ipFiles);
+    }
+    
+    private function GetFiles($openFolder, $type = "ipV4", $maxSizeFile = false) {
+        $ipFiles = glob($openFolder . '*.' . $type, GLOB_BRACE);
+        if ($maxSizeFile) {
+            $docs = array();
+            foreach ($ipFiles as $path) {
+                $docs[$path] = filesize($path);
+            }
+            asort($docs, SORT_NUMERIC);
+            end($docs);
+            return key($docs);
+        }
+        foreach ($ipFiles as $key => $value) {
+            $ipFiles[$key] = pathinfo(basename($value), PATHINFO_FILENAME);
+        }
+        sort($ipFiles, SORT_NUMERIC);
         return $ipFiles;
     }
-    private function ip2int($ip) {
-        $a = explode(".", trim($ip));
-        if (sizeof($a) == 4) {
-            return $a[0] * 256 * 256 * 256 + $a[1] * 256 * 256 + $a[2] * 256 + $a[3];
-        } else {
-            return 0;
-        }
-    }
-    private function GetFiles($openFolder, $type = "blk", $one = false) {
-        $ipFiles = array();
-        $i       = 0;
-        if ($handle = opendir($openFolder)) {
-            while (false !== ($entry = readdir($handle))) {
-                if ($entry != "." && $entry != ".." && strtolower(substr($entry, strlen($entry) - 3)) == $type) {
-                    if ($one)
-                        return $entry;
-                    $splitted  = explode('.', $entry);
-                    $ipFiles[] = $splitted[0];
-                }
-            }
-            closedir($handle);
-        }
-        sort($ipFiles);
-        return $ipFiles;
-    }
+    
     private function GetIpData($value, $ipblk) {
         $maybe = '';
-        $handle = fopen($this->thisPath . 'ip_blocks/' . $ipblk . '.blk', "r") or die("Couldn't get handle");
+        $handle = fopen($this->thisPath . 'ip_blocks' . DIRECTORY_SEPARATOR . $ipblk . '.' . $this->ipType, "r") or die("Couldn't get handle");
         if ($handle) {
             while (!feof($handle)) {
                 $buffer = fgets($handle);
                 if (strlen($buffer) >= 8) {
-                    $b       = str_getcsv($buffer, ',', '"', '\\');
+                    $b = str_getcsv($buffer, ',', '"', '\\');
                     $ip_from = trim($b[0]);
-                    $ip_to   = trim($b[1]);
+                    $ip_to = trim($b[1]);
                     if ($ip_from <= $value && $ip_to >= $value) {
                         fclose($handle);
                         return $buffer;
@@ -157,5 +165,47 @@ class IpLocator {
             fclose($handle);
             return $maybe;
         }
+    }
+    
+    private function IPv4To6($Ip) {
+        static $Mask = '::ffff:';
+        $IPv6 = (strpos($Ip, '::') === 0);
+        $IPv4 = (strpos($Ip, '.') > 0);
+        
+        if (!$IPv4 && !$IPv6) return false;
+        if ($IPv6 && $IPv4) $Ip = substr($Ip, strrpos($Ip, ':') + 1);
+        elseif (!$IPv4) return $Ip;
+        
+        $Ip = array_pad(explode('.', $Ip), 4, 0);
+        if (count($Ip) > 4) return false;
+        for ($i = 0; $i < 4; $i++) if ($Ip[$i] > 255) return false;
+        
+        $Part7 = base_convert(($Ip[0] * 256) + $Ip[1], 10, 16);
+        $Part8 = base_convert(($Ip[2] * 256) + $Ip[3], 10, 16);
+        return $Mask . $Part7 . ':' . $Part8;
+    }
+    
+    private function ExpandIPv6Notation($Ip) {
+        if (strpos($Ip, '::') !== false) $Ip = str_replace('::', str_repeat(':0', 8 - substr_count($Ip, ':')) . ':', $Ip);
+        if (strpos($Ip, ':') === 0) $Ip = '0' . $Ip;
+        return $Ip;
+    }
+    
+    private function Ipv6ToLongV2($Ip, $DatabaseParts = 2) {
+        $Ip = $this->ExpandIPv6Notation($Ip);
+        $Parts = explode(':', $Ip);
+        $Ip = array('', '');
+        for ($i = 0; $i < 4; $i++) $Ip[0].= str_pad(base_convert($Parts[$i], 16, 2), 16, 0, STR_PAD_LEFT);
+        for ($i = 4; $i < 8; $i++) $Ip[1].= str_pad(base_convert($Parts[$i], 16, 2), 16, 0, STR_PAD_LEFT);
+        
+        if ($DatabaseParts == 2) return array(base_convert($Ip[0], 2, 10), base_convert($Ip[1], 2, 10));
+        else return base_convert($Ip[0], 2, 10) + base_convert($Ip[1], 2, 10);
+    }
+    private function Ipv6ToLongV1($ip) {
+        $binNum = '';
+        foreach (unpack('C*', inet_pton($ip)) as $byte) {
+            $binNum.= str_pad(decbin($byte), 8, "0", STR_PAD_LEFT);
+        }
+        return base_convert(ltrim($binNum, '0'), 2, 10);
     }
 }
