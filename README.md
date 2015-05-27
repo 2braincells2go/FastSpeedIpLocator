@@ -65,6 +65,7 @@ index.php - example
 License
 ----
 MIT
+
 Author: Tóth András
 ---
 http://atandrastoth.co.uk/
