@@ -12,14 +12,16 @@
         <?php
         ini_set('max_execution_time', 300);
         require_once ('IpLocator.php');
-        if (isset($_POST['look']) && (isset($_POST['inp']) || $_POST['inp'] != '')) {
+        if (isset($_POST['look']) && $_POST['inp'] != '') {
             $curTime = microtime(true);
             $loc = IpLocator::getInstance();
             $res = $loc->LocateIp($_POST['inp']);
             $elp = (round(microtime(true) - $curTime, 3) * 1000);
             echo '<br>';
-            foreach ($res as $key => $value) {
-                echo $key . ' => ' . $value . '<br>';
+            if($res){
+                foreach ($res as $key => $value) {
+                    echo $key . ' => ' . $value . '<br>';
+                }
             }
             echo '<br>';
             echo 'Elpassed time: ' . $elp . ' Us';
